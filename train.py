@@ -217,7 +217,7 @@ def main():
 
     prediction_size = (256,512)
 
-    pano_dataset_train = S3D(config['root_path'], prediction_size[1],prediction_size[0], subset=0.0005)
+    pano_dataset_train = S3D(config['root_path'], prediction_size[1],prediction_size[0])
 
 
     dataset_train = DataLoader(
