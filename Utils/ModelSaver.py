@@ -8,7 +8,8 @@ import torch
 class BaseSaver:
     def __init__(self, path):
         self.path = path
-        os.system('mkdir -p %s'%path)
+        #os.system('mkdir -p %s'%path)
+        os.makedirs(path, exist_ok=True)
         self.model_lst = self._getList()
 
     def _getList(self):

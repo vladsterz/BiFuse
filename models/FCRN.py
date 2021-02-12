@@ -300,8 +300,9 @@ class fusion_ResNet(nn.Module):
 class CETransform(nn.Module):
     def __init__(self):
         super(CETransform, self).__init__()
-        equ_h = [512, 128, 64, 32, 16]
-        cube_h = [256, 64, 32, 16, 8]
+        # equ_h = [512, 128, 64, 32, 16]
+        equ_h = [512,256, 128, 64, 32, 16, 8, 4]
+        cube_h = [256,128, 64, 32, 16, 8, 4]
 
         self.c2e = dict()
         self.e2c = dict()
@@ -354,7 +355,7 @@ def lstm_forward(bilstm_list, CE, feat_equi, feat_cube, idx, max_iters=3):
     return e_out_list
 
 class Refine(nn.Module):
-    def __init__(self):
+    def __init__(self,prediction_size):
         super(Refine, self).__init__()
         self.refine_1 = nn.Sequential(
                         nn.Conv2d(5, 32, kernel_size=3, stride=1, padding=1, bias=False),
@@ -391,8 +392,8 @@ class Refine(nn.Module):
                         nn.ReLU(inplace=True),
                         nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1, bias=False)
                         )
-        self.bilinear_1 = nn.UpsamplingBilinear2d(size=(256,512))
-        self.bilinear_2 = nn.UpsamplingBilinear2d(size=(512,1024))
+        self.bilinear_1 = nn.UpsamplingBilinear2d(size=(prediction_size[0] // 2,prediction_size[1]//2))
+        self.bilinear_2 = nn.UpsamplingBilinear2d(size=prediction_size)
     def forward(self, inputs):
         x = inputs
         out_1 = self.refine_1(x)
@@ -406,15 +407,25 @@ class Refine(nn.Module):
         return out_3                
 
 class MyModel(nn.Module):
-    def __init__(self, layers, decoder, output_size=None, in_channels=3, pretrained=True):
+    def __init__(self, layers, decoder, output_size=None, in_channels=3, pretrained=True, prediction_size = None, training_stage = 1):
+        #check implementation details in original paper to make sense of training stage
         super(MyModel, self).__init__()
         bs = 1
+        self.training_stage = training_stage
+        if prediction_size is None:
+            self.prediction_size = (512,1024)
+            self.cube_size = (256, 256)
+        else:
+            self.prediction_size = prediction_size
+            d_factor = 1024 // prediction_size[1]
+            self.cube_size = (256 // d_factor, 256 // d_factor)
         self.equi_model = fusion_ResNet(
-            bs, layers, decoder, (512, 1024), 3, pretrained, padding='ZeroPad')
+            bs, layers, decoder, self.prediction_size, 3, pretrained, padding='ZeroPad')
         self.cube_model = fusion_ResNet(
-            bs*6, layers, decoder, (256, 256), 3, pretrained, padding='SpherePad')
+            bs*6, layers, decoder, self.cube_size, 3, pretrained, padding='SpherePad')
         
-        self.refine_model = Refine()
+        if self.training_stage == 3:
+            self.refine_model = Refine(prediction_size)
 
         if layers <= 34:
             num_channels = 512
@@ -424,14 +435,14 @@ class MyModel(nn.Module):
         self.equi_decoder = choose_decoder(decoder, num_channels//2, padding='ZeroPad')
         self.equi_conv3 = nn.Sequential(
                 nn.Conv2d(num_channels//32, 1, kernel_size=3, stride=1, padding=1, bias=False),
-                nn.UpsamplingBilinear2d(size=(512, 1024))
+                nn.UpsamplingBilinear2d(size=self.prediction_size)
                 )
         self.cube_decoder = choose_decoder(decoder, num_channels//2, padding='SpherePad')
         mypad = getattr(Utils.CubePad, 'SpherePad')
         self.cube_conv3 = nn.Sequential(
                 mypad(1),
                 nn.Conv2d(num_channels//32, 1, kernel_size=3, stride=1, padding=0, bias=False),
-                nn.UpsamplingBilinear2d(size=(256, 256))
+                nn.UpsamplingBilinear2d(size=self.cube_size)
                 )
 
         self.equi_decoder.apply(weights_init)
@@ -466,7 +477,8 @@ class MyModel(nn.Module):
             self.conv_c2e.append(conv_c2e)
             self.conv_mask.append(conv_mask)
 
-        self.grid = Utils.Equirec2Cube(None, 512, 1024, 256, 90).GetGrid()
+        #self.grid = Utils.Equirec2Cube(None, 512, 1024, 256, 90).GetGrid()
+        self.grid = Utils.Equirec2Cube(None, self.prediction_size[0], self.prediction_size[1], self.cube_size[0], 90).GetGrid()
         self.d2p = Utils.Depth2Points(self.grid)
     def forward_FCRN_fusion(self, equi, fusion=False):
         cube = self.ce.E2C(equi)
@@ -519,9 +531,11 @@ class MyModel(nn.Module):
         cube_pts = self.d2p(cube_depth)        
         c2e_depth = self.ce.C2E(torch.norm(cube_pts, p=2, dim=3).unsqueeze(1))
         
-        feat_cat = torch.cat((equi, equi_depth, c2e_depth), dim = 1)
-
-        refine_final = self.refine_model(feat_cat)
+        if self.training_stage == 3:
+            feat_cat = torch.cat((equi, equi_depth, c2e_depth), dim = 1)
+            refine_final = self.refine_model(feat_cat)
+        else:
+            refine_final = None
 
         return equi_depth, cube_depth, refine_final
    
@@ -553,5 +567,6 @@ class MyModel(nn.Module):
         return equi_depth
 
     def forward(self, x):
-        return self.forward_FCRN_fusion(x, True)
+        use_fusion = self.training_stage in [2,3]
+        return self.forward_FCRN_fusion(x, use_fusion)
 
