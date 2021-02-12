@@ -27,14 +27,17 @@ from Utils.berhu import Berhu as ReverseHuberLoss
 
 
 #torch.backends.cudnn.benchmark = True
-torch.backends.cudnn.deterministic = True
 
 parser = argparse.ArgumentParser(description='Training script for 360 layout',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--mode', default='test', type=str, help='train/test mode')
 parser.add_argument('--pre', default=None, type=int, help='pretrain(default: latest)')
 parser.add_argument('--log', default='Results.txt', type=str, help='log file name')
+parser.add_argument('--gpu_id', required=True, type=str, help='gpu id')
 args = parser.parse_args()
+
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+torch.backends.cudnn.deterministic = True
 
 
 def train(args, config, dataset_train, dataset_val, model, saver, writer):

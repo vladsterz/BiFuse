@@ -11,13 +11,13 @@ metrics: ["rmse", "mae","mre", 'rmse_log', "delta1", 'delta2', 'delta3']
 processes: 1
 batch_size: 1
 #batch_size: 8
-epochs: 80 #total epoch number
+epochs: 40 #total epoch number
 lr: 0.0003
-print_step: 2
+print_step: 30
 log_step: 30
 val_metric_field: ["rmse", "mae","mre"]
 model_layer: 50
 decoder_type: "upproj"
-training_stage: 3
+training_stage: 1
 
 #output_size: (512,1024)

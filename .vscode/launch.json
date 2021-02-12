@@ -11,7 +11,8 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--mode", "train"
+                "--mode", "train",
+                "--gpu_id", "0"
             ]
         }
     ]

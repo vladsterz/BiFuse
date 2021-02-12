@@ -3,16 +3,20 @@ import cv2
 import glob
 import os
 import numpy as np
+from random import Random
 from torch.utils.data import Dataset
 
 
 class S3D(Dataset):
-    def __init__(self, root_path, width, height, subset = None):
+    def __init__(self, root_path, width, height, subset = None, seed = 1313):
         super().__init__()
         self._root_path = root_path
         self._width = width
         self._height = height
         self._paths = glob.glob(f"{root_path}\\*\\*\\*\\*")
+        self._seed = seed
+        self._rng = Random(seed)
+        self._room_lightings = ["rawlight", "coldlight", "warmlight"]
         if subset is not None:
             self._paths = self._paths[:int(len(self._paths) * subset)]
         
@@ -20,8 +24,9 @@ class S3D(Dataset):
         self._resize = (width != 1024) or (height != 512) #S3D
 
     def __getitem__(self, i):
+        light_type = self._rng.choice(self._room_lightings)
         path = os.path.join(self._paths[i], "full")
-        rgb = cv2.imread(os.path.join(path, "rgb_rawlight.png"))
+        rgb = cv2.imread(os.path.join(path, f"rgb_{light_type}.png"))
         depth = cv2.imread(os.path.join(path, "depth.png"), -1).astype(np.float)
         if self._resize:
             rgb = cv2.resize(rgb, (self._width, self._height), cv2.INTER_CUBIC)
